@@ -126,6 +126,7 @@ REAL exactForwardProjection(unsigned int projection,
     return sum;
 }
 */
+/*
 REAL simpleBackwardsProjection(unsigned int x, unsigned int y) {
     REAL sum = 0.0;
 
@@ -200,6 +201,7 @@ REAL simpleBackwardsProjection(unsigned int x, unsigned int y) {
     }
     return sum;
 }
+*/
 
 int main(int argc, char** argv) {
     // timer to mesure execution time
