@@ -1,0 +1,20 @@
+# Distribution file for the SplitBregman project.
+# http://www.openengine.dk/wiki/Projects/SplitBregman
+
+# main repository
+darcs / http://openengine.dk/code/openengine
+darcs-dev / fh.daimi.au.dk:/users/cgd/code/openengine
+
+# project repository
+darcs /projects/SplitBregman http://openengine.dk/code/projects/SplitBregman
+darcs-dev /projects/SplitBregman fh.daimi.au.dk:/users/cgd/code/projects/SplitBregman
+
+# required extensions
+darcs /extensions/TexUtils      http://openengine.dk/code/extensions/TexUtils
+darcs /extensions/FreeImage     http://openengine.dk/code/extensions/FreeImage
+
+darcs-dev /extensions/TexUtils  fh.daimi.au.dk:/users/cgd/code/extensions/TexUtils
+darcs-dev /extensions/FreeImage fh.daimi.au.dk:/users/cgd/code/extensions/FreeImage
+
+# project data
+any /projects/SplitBregman/data    http://rsbweb.nih.gov/ij/plugins/images/shepp256.png
