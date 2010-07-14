@@ -29,4 +29,7 @@ TARGET_LINK_LIBRARIES(${PROJECT_NAME}
   # Extension dependencies
   Extensions_TexUtils
   Extensions_FreeImage
+  Extensions_OpenGLRenderer
+  Extensions_SetupHelpers
+  Extensions_SDL
 )

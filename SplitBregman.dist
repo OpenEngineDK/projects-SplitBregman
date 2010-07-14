@@ -12,9 +12,27 @@ darcs-dev /projects/SplitBregman fh.daimi.au.dk:/users/cgd/code/projects/SplitBr
 # required extensions
 darcs /extensions/TexUtils      http://openengine.dk/code/extensions/TexUtils
 darcs /extensions/FreeImage     http://openengine.dk/code/extensions/FreeImage
+darcs /extensions/OpenGLRenderer         http://openengine.dk/code/extensions/OpenGLRenderer
+darcs /extensions/SetupHelpers           http://openengine.dk/code/extensions/SetupHelpers
+darcs /extensions/SDL                    http://openengine.dk/code/extensions/SDL
+darcs /extensions/HUD                    http://openengine.dk/code/extensions/HUD
+darcs /extensions/SDLImage               http://openengine.dk/code/extensions/SDLImage
+darcs /extensions/CairoResource          http://openengine.dk/code/extensions/CairoResource
+darcs /extensions/TGAResource            http://openengine.dk/code/extensions/TGAResource
+darcs /extensions/OBJResource            http://openengine.dk/code/extensions/OBJResource
+darcs /extensions/AccelerationStructures http://openengine.dk/code/extensions/AccelerationStructures
 
 darcs-dev /extensions/TexUtils  fh.daimi.au.dk:/users/cgd/code/extensions/TexUtils
 darcs-dev /extensions/FreeImage fh.daimi.au.dk:/users/cgd/code/extensions/FreeImage
+darcs-dev /extensions/OpenGLRenderer         fh.daimi.au.dk:/users/cgd/code/extensions/OpenGLRenderer
+darcs-dev /extensions/SetupHelpers           fh.daimi.au.dk:/users/cgd/code/extensions/SetupHelpers
+darcs-dev /extensions/SDL                    fh.daimi.au.dk:/users/cgd/code/extensions/SDL
+darcs-dev /extensions/HUD                    fh.daimi.au.dk:/users/cgd/code/extensions/HUD
+darcs-dev /extensions/SDLImage               fh.daimi.au.dk:/users/cgd/code/extensions/SDLImage
+darcs-dev /extensions/CairoResource          fh.daimi.au.dk:/users/cgd/code/extensions/CairoResource
+darcs-dev /extensions/TGAResource            fh.daimi.au.dk:/users/cgd/code/extensions/TGAResource
+darcs-dev /extensions/OBJResource            fh.daimi.au.dk:/users/cgd/code/extensions/OBJResource
+darcs-dev /extensions/AccelerationStructures fh.daimi.au.dk:/users/cgd/code/extensions/AccelerationStructures
 
 # project data
 any /projects/SplitBregman/data    http://rsbweb.nih.gov/ij/plugins/images/shepp256.png
