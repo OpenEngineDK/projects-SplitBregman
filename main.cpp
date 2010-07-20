@@ -385,13 +385,13 @@ REAL simpleBackwardsProjection(REAL x, REAL y,
         }
         if (!intersects) continue; //Core::Exception("no intersection");
 
-        REAL index = intersection * numPixelsPerProjection;
 
-//         logger.info << "intersection: " << intersection << logger.end;
+        //REAL index = intersection * numPixelsPerProjection;
+        //sum += (*sinogram)(projection, ceil(index));
 //         logger.info << "index: " <<  index << logger.end;
-
-        sum += (*sinogram)(projection, ceil(index));
-        //sum += sinogram->InterpolatedPixel(projection, index)[0];
+//         logger.info << "intersection: " << intersection << logger.end;
+        sum += sinogram->InterpolatedPixel(projection/(REAL)numProjections, 
+                                           intersection)[0];
     }
     logger.info << "sum: " << sum << logger.end;
     return sum;
