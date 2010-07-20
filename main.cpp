@@ -38,15 +38,16 @@ Core::Mutex mutexPoints;
 std::list<Geometry::Line> lines;
 std::list< Vector<2,REAL> > points;
 
-//const unsigned int numPixelsOnLine = 512; //w>h ? h : w; // @todo is this right?
+//const unsigned int numPixelsPerProjection = 512; //w>h ? h : w; // @todo is this right?
 //const unsigned int numProjections = 512;
-const unsigned int numProjections = 600;
-const unsigned int numPixelsOnLine = 4*numProjections; //w>h ? h : w; // @todo is this right?
+const unsigned int numProjections = 64;
+const unsigned int numPixelsPerProjection = 4*numProjections; //w>h ? h : w; // @todo is this right?
 const unsigned int numSamplesPerLine = 512 * 3;
 const REAL startAngle = -PI/2;
 //const REAL fanAngle = (PI / 2);
 const REAL fanAngleInDegrees = 105/2;
 const REAL fanAngle = PI*(fanAngleInDegrees/180.0);
+const REAL maxAngle = PI;
 
 REAL simpleForwardProjection(unsigned int projection,
                              unsigned int targetPixel,
@@ -56,13 +57,13 @@ REAL simpleForwardProjection(unsigned int projection,
 
     unsigned int w = input->GetWidth();
     unsigned int h = input->GetHeight();
-    //unsigned int numPixelsOnLine = w>h ? h : w; // @todo is this right?
+    //unsigned int numPixelsPerProjection = w>h ? h : w; // @todo is this right?
     REAL hw = w / 2.0;
     REAL hh = h / 2.0;
 
     REAL radius = sqrt(hw*hw+hh*hh);
     REAL halfFanWidth = (2*radius) * tan(fanAngle/2);
-    REAL pixelWidth = (2*halfFanWidth) / numPixelsOnLine;
+    REAL pixelWidth = (2*halfFanWidth) / numPixelsPerProjection;
     REAL pixelOffset = pixelWidth / 2;
     REAL pixelStartPosition = halfFanWidth - pixelOffset;
 
@@ -175,41 +176,305 @@ REAL exactForwardProjection(unsigned int projection,
     return sum;
 }
 */
+
+class LineSegment {
+public:
+    Vector<2,REAL> point1;
+    Vector<2,REAL> point2;
+
+    LineSegment(Vector<2,REAL> point1, Vector<2,REAL> point2)
+        : point1(point1), point2(point2) {}
+
+    bool Intersects(LineSegment line) {
+        REAL value;
+        return Intersection(line, &value);
+    }
+
+    // from: http://local.wasp.uwa.edu.au/~pbourke/geometry/lineline2d/
+    bool Intersection(LineSegment line, REAL* value) {
+        REAL x1 = point1[0];
+        REAL x2 = point2[0];
+        REAL x3 = line.point1[0];
+        REAL x4 = line.point2[0];
+        REAL y1 = point1[1];
+        REAL y2 = point2[1];
+        REAL y3 = line.point1[1];
+        REAL y4 = line.point2[1];
+
+        REAL denum = (y4-y3)*(x2-x1)-(x4-x3)*(y2-y1);
+        logger.info << "denum: " << denum << logger.end;
+        if (denum == 0) return false;
+        //@todo: sammenfaldene eller parallele
+
+        REAL ua =( (x4-x3)*(y1-y3)-(y4-y3)*(x1-x3) ) / denum;
+        REAL x = x1 + ua*(x2-x1);
+        REAL ub =( (x2-x1)*(y1-y3)-(y2-y1)*(x1-x3) ) / denum;
+        REAL y = y1 + ub*(y2-y1);
+
+        REAL paramx = (x-x1)/(x2-x1); //@todo:check this
+        REAL paramy = (y-y1)/(y2-y1); //@todo:check this
+        logger.info << "paramx: " << paramx << logger.end;
+        logger.info << "paramy: " << paramy << logger.end;
+        if ( !(0 <= paramx && paramx <= 1) ) return false;
+        if ( !(0 <= paramy && paramy <= 1) ) return false;
+        *value = paramx;
+        return true;
+    }
+
+    // from: http://softsurfer.com/Archive/algorithm_0102/algorithm_0102.htm
+    bool ProjectPointOntoLineSegment(Vector<2,REAL> p, REAL* value) {
+        Vector<2,REAL> p0 = point1;
+        Vector<2,REAL> p1 = point2;
+
+        Vector<2,REAL> w = p - p0;
+
+        Vector<2,REAL> vl = p1 - p0;
+
+        REAL b = (w * vl) / (vl*vl);
+
+        if (0<=b && b<=1) {
+            *value = b;
+            return true;
+        } else
+            return false;
+    }
+
+    // from: http://softsurfer.com/Archive/algorithm_0104/algorithm_0104B.htm
+    bool ProjectRayOntoLineSegment(LineSegment line, REAL* value) {
+        Vector<2,REAL> q0 = point1;
+        Vector<2,REAL> q1 = point2;
+        Vector<2,REAL> p0 = line.point1;
+        Vector<2,REAL> p1 = line.point2;
+
+        Vector<2,REAL> w = p0 - q0;
+        Vector<2,REAL> v = q1 - q0;
+        Vector<2,REAL> u = p1 - p0;
+        /*
+        logger.info << "w: " << w << logger.end;
+        logger.info << "v: " << v << logger.end;
+        logger.info << "u: " << u << logger.end;
+        */
+        REAL denom = v[0]*u[1]-v[1]*u[0];
+        //logger.info << "denom: " << denom << logger.end;
+
+        REAL si = (v[1]*w[0] - v[0]*w[1]) / denom; //on P0-P1
+        //logger.info << "si: " << si << logger.end;
+        //REAL ti = u[0]*w[1] - u[1]*w[0] / -denom; //on Q0-Q1
+
+        if (0<=si && si<=1) {
+            *value = si;
+            return true;
+        } else
+            return false;
+    }
+
+    Vector<2,REAL> GetPointOnLine(REAL parameter) {
+        return point1 * (1-parameter) + point2 * parameter;
+    }
+
+    LineSegment GetIntersectionLineSeqment(unsigned int x,
+                                           unsigned int y) {
+
+        std::vector< Vector<2,REAL> > corners;
+        corners.push_back( Vector<2,REAL>(x  ,y) );
+        corners.push_back( Vector<2,REAL>(x+1,y) );
+        corners.push_back( Vector<2,REAL>(x+1,y+1) );
+        corners.push_back( Vector<2,REAL>(x,  y+1) );
+        // first point again
+        corners.push_back( Vector<2,REAL>(x  ,y) );
+
+        Vector<2,REAL> intersections[2];
+        unsigned int counter = 0;
+        for (unsigned int i=0; i<4; i++) {
+            logger.info << "corner: " << i << logger.end;
+            REAL a2 = 0.0;
+            LineSegment l(corners[i],corners[i+1]);
+            mutexLines.Lock();
+            lines.push_back( Line( Vector<3,float>(l.point1[0],l.point1[1],0.0),
+                                   Vector<3,float>(l.point2[0],l.point2[1],0.0)) );
+            mutexLines.Unlock();
+            logger.info << "line: " << l.ToString() << logger.end;            
+            bool instsa2 = l.ProjectRayOntoLineSegment(*this,&a2);
+            if (instsa2) {
+                logger.info << "intersection: " << a2 << logger.end;
+                if (counter > 1) {
+                    //while(true) {}
+                    throw Core::Exception("to many intersections");
+                }
+                else
+                    intersections[counter++] = GetPointOnLine(a2);
+            }
+        }
+        if (counter != 1)
+            throw Core::Exception("not two intersection points!");
+        return LineSegment(intersections[0], intersections[1]);
+    }
+
+    std::string ToString() {
+        std::string str = "";
+        str += "(p1:" + Utils::Convert::ToString(point1);
+        str += ", p2:" + Utils::Convert::ToString(point2);
+        str += ")";
+        return str;
+    }
+};
+
+REAL simpleBackwardsProjection(REAL x, REAL y,
+                               Texture2DPtr(REAL) sinogram) {
+    REAL sum = 0.0;
+
+    Vector<2,REAL> center(x+0.5,y+0.5);
+
+    logger.info << "(x,y): (" << x << ", " << y << ")" << logger.end; 
+    for (unsigned int projection = 0; projection<numProjections; projection++) {
+
+        unsigned int w = sinogram->GetWidth();
+        unsigned int h = sinogram->GetHeight();
+        REAL hw = w / 2.0;
+        REAL hh = h / 2.0;
+        REAL radius = sqrt(hw*hw+hh*hh);
+
+        // points defining target plate
+        REAL halfFanWidth = (2*radius) * tan(fanAngle/2);
+        //REAL dist = 10000000000.0; //@todo: calc this
+        Vector<2,REAL> uP(-radius, halfFanWidth); // upper projection end point
+        Vector<2,REAL> lP(-radius, -halfFanWidth); // lower projection end point
+        Vector<2,REAL> sourcePosition(radius, 0.0); // parallel beam
+
+        REAL angle = maxAngle *(projection/(REAL)numProjections); 
+        
+        //logger.info << "projection: " << projection << logger.end; 
+        //logger.info << "angle: " << angle << logger.end; 
+
+        // from: http://en.wikipedia.org/wiki/Rotation_matrix
+        // @todo: rotate source and pixel position 
+        //angle = startAngle - angle; // clockwise
+        angle += startAngle; // counter clockwise
+        Matrix<2,2,REAL> rotation(cos(angle), -sin(angle),
+                                  sin(angle),  cos(angle));
+
+        // @todo: rotate points
+        sourcePosition =  rotation * sourcePosition;
+        uP =  rotation * uP;
+        lP =  rotation * lP;
+
+        LineSegment target(uP,lP);
+
+        mutexLines.Lock();
+        lines.push_back( Line( Vector<3,float>(target.point1[0],target.point1[1],0.0),
+                                   Vector<3,float>(target.point2[0],target.point2[1],0.0)) );
+            mutexLines.Unlock();
+        // project pixel/voxel onto recording plate
+        // which gives a two intersection point (a line)
+        REAL intersection = 0.0;
+        bool intersects = false;
+
+        const bool useFanBeam = false;
+        if(useFanBeam) {
+            LineSegment ray(sourcePosition, center);
+            Line line3d( Vector<3,float>(ray.point1[0],ray.point1[1],0.0),
+                         Vector<3,float>(ray.point2[0],ray.point2[1],0.0) );
+            mutexLines.Lock();
+            lines.push_back( line3d );
+            mutexLines.Unlock();
+            
+            intersects = ray.ProjectRayOntoLineSegment(target, &intersection);
+        } else { // parallel beam
+            intersects = target.ProjectPointOntoLineSegment(center,
+                                                            &intersection);
+        }
+        if (!intersects) continue; //Core::Exception("no intersection");
+
+        REAL index = intersection * numPixelsPerProjection;
+
+//         logger.info << "intersection: " << intersection << logger.end;
+//         logger.info << "index: " <<  index << logger.end;
+
+        sum += (*sinogram)(projection, ceil(index));
+        //sum += sinogram->InterpolatedPixel(projection, index)[0];
+    }
+    logger.info << "sum: " << sum << logger.end;
+    return sum;
+}
+
 /*
-REAL simpleBackwardsProjection(unsigned int x, unsigned int y) {
+REAL exactBackwardsProjection(REAL x, REAL y,
+                               Texture2DPtr(REAL) sinogram) {
     REAL sum = 0.0;
 
     std::vector< Vector<2,REAL> > corners;
     corners.push_back( Vector<2,REAL>(x,y) );
     corners.push_back( Vector<2,REAL>(x+1,y) );
-    corners.push_back( Vector<2,REAL>(x,y+1) );
     corners.push_back( Vector<2,REAL>(x+1,y+1) );
+    corners.push_back( Vector<2,REAL>(x,y+1) );
 
+    logger.info << "(x,y): (" << x << ", " << y << ")" << logger.end; 
     for (unsigned int projection = 0; projection<numProjections; projection++) {
 
-        Vector<2,float> s; // source
+        unsigned int w = sinogram->GetWidth();
+        unsigned int h = sinogram->GetHeight();
+        REAL hw = w / 2.0;
+        REAL hh = h / 2.0;
+        REAL radius = sqrt(hw*hw+hh*hh);
 
         // points defining target plate
-        Vector<2,REAL> uP; // upper projection end point
-        Vector<2,REAL> lP; // lower projection end point
-        Line target = Line(uP,lP);
+        REAL halfFanWidth = (2*radius) * tan(fanAngle/2);
+        //REAL dist = 10000000000.0; //@todo: calc this
+        Vector<2,REAL> uP(-radius, halfFanWidth); // upper projection end point
+        Vector<2,REAL> lP(-radius, -halfFanWidth); // lower projection end point
+        Vector<2,REAL> sourcePosition(radius, 0.0); // parallel beam
+
+        REAL angle = maxAngle *(projection/(REAL)numProjections); 
+        
+        //logger.info << "projection: " << projection << logger.end; 
+        //logger.info << "angle: " << angle << logger.end; 
+
+        // from: http://en.wikipedia.org/wiki/Rotation_matrix
+        // @todo: rotate source and pixel position 
+        //angle = startAngle - angle; // clockwise
+        angle += startAngle; // counter clockwise
+        Matrix<2,2,REAL> rotation(cos(angle), -sin(angle),
+                                  sin(angle),  cos(angle));
 
         // @todo: rotate points
+        sourcePosition =  rotation * sourcePosition;
+        uP =  rotation * uP;
+        lP =  rotation * lP;
 
+        LineSegment target(uP,lP);
+
+        mutexLines.Lock();
+        lines.push_back( Line( Vector<3,float>(target.point1[0],target.point1[1],0.0),
+                                   Vector<3,float>(target.point2[0],target.point2[1],0.0)) );
+            mutexLines.Unlock();
         // project pixel/voxel onto recording plate
         // which gives a two intersection point (a line)
         unsigned int numCorners = 4;
         REAL intersection[numCorners];
-        for (unsigned int corner = 0; corner<numCorners;; corner++) {
-            Line line = Line(s, corners[corner]);
-            intersection[corner] = Intersect(target,line);
-        }
+        for (unsigned int corner = 0; corner<numCorners; corner++) {
+            LineSegment ray(sourcePosition, corners[corner]);
+            
+            mutexLines.Lock();
+            lines.push_back( Line( Vector<3,float>(ray.point1[0],ray.point1[1],0.0),
+                                   Vector<3,float>(ray.point2[0],ray.point2[1],0.0)) );
+            mutexLines.Unlock();
+            
+            REAL value = 0.0; // @todo: not good default value
+            bool intersects = ray.ProjectRayOntoLineSegment(target, &value);
 
-        REAL minI = 0;
-        REAL maxI = 1;
-        for (unsigned int corner = 0; corner<numCorners;; corner++) {
-            minI = min(minI, intersection[corner]);
-            maxI = max(maxI, intersection[corner]);
+            //getchar();
+            if (!intersects) continue; //throw Core::Exception("no intersection");
+            intersection[corner] = value;
+        }
+        //getchar();
+        unsigned int count = 0;
+        //while(count>1000000){count = count +1;}
+
+        REAL minI = 1;
+        REAL maxI = 0;
+        for (unsigned int corner = 0; corner<numCorners; corner++) {
+            minI = std::min(minI, intersection[corner]);
+            maxI = std::max(maxI, intersection[corner]);
         }
         REAL minIndex = minI * numPixelsPerProjection;
         REAL maxIndex = maxI * numPixelsPerProjection;
@@ -218,44 +483,122 @@ REAL simpleBackwardsProjection(unsigned int x, unsigned int y) {
         REAL minRoundedIndex = ceil(minIndex);
         REAL maxRoundedIndex = floor(maxIndex);
 
+//         logger.info << "minI: " << minI << logger.end;
+//         logger.info << "maxI: " << maxI << logger.end;
+//         logger.info << "minIndex: " << minIndex << logger.end;
+//         logger.info << "maxIndex: " << maxIndex << logger.end;
+//         logger.info << "minRoundedIndex: " << minRoundedIndex << logger.end;
+//         logger.info << "maxRoundedIndex: " << maxRoundedIndex << logger.end;
+
+
+
+        // @todo: add the two corners that does not make 
+        //        a clean cut on the projection plate
+
+        // (from minIndex to minRoundedIndex)
+        REAL areaMin = 1.0;
+
+//         LineSegment als(target.GetPointOnLine(minRoundedIndex), 
+//                          sourcePosition);
+//         logger.info << "als: " << als.ToString() << logger.end;
+
+//         LineSegment a = als.GetIntersectionLineSeqment(x, y);
+//         Vector<2,float> intersection_a1 = a.point1;
+//         Vector<2,float> intersection_a2 = a.point2;
+//         logger.info << "a: " << a.ToString() << logger.end;
+
+        //logger.info << "minRoundedIndex: " << minRoundedIndex << logger.end;
+        sum += areaMin * (*sinogram)(projection, minRoundedIndex-1);
+
+        
+        // (from maxIndex to maxRoundedIndex)
+
+        if (minRoundedIndex < maxRoundedIndex && false) {
+
+            logger.warning << "MIN < MAX rounded index - NOT TESTED !!!!!!!" << logger.end;
+            getchar();
+            if(false) {
+            
+
         // back project all lines between 127 and 136 
         //    to find intersection with pixel
-        Vector<2,float> intersection_a1;
-        Vector<2,float> intersection_a2;
         // @todo: calc from minRoundedIndex
+        LineSegment als(target.GetPointOnLine(minRoundedIndex), 
+                         sourcePosition);
+
+        mutexLines.Lock();
+        lines.push_back( Line( Vector<3,float>(als.point1[0],als.point1[1],0.0),
+                               Vector<3,float>(als.point2[0],als.point2[1],0.0)) );
+        mutexLines.Unlock();
+        
+        logger.info << "als: " << als.ToString() << logger.end;
+
+        LineSegment a = als.GetIntersectionLineSeqment(x, y);
+        Vector<2,float> intersection_a1 = a.point1;
+        Vector<2,float> intersection_a2 = a.point2;
+        logger.info << "a: " << a.ToString() << logger.end;
 
         for (unsigned int index = minRoundedIndex+1; index <= maxRoundedIndex;
              index++) {
-            Vector<2,float> intersection_b1;
-            Vector<2,float> intersection_b2;
+
             // @todo: calc from index            
+            LineSegment bls(target.GetPointOnLine(index), 
+                            sourcePosition);
+            LineSegment b = bls.GetIntersectionLineSeqment(x, y);
+            Vector<2,float> intersection_b1 = b.point1;
+            Vector<2,float> intersection_b2 = b.point2;
+
 
             // calcultate area ration for each area spanned by the lines
             // from: http://www.wikihow.com/Calculate-the-Area-of-a-Polygon
-            REAL area;
+            REAL step2 =
+                intersection_a1[0] * intersection_a2[1] +
+                intersection_a2[0] * intersection_b2[1] +
+                intersection_b2[0] * intersection_b1[1] +
+                intersection_b1[0] * intersection_a1[1];
+
+            REAL step3 =
+                intersection_a1[1] * intersection_a2[0] +
+                intersection_a2[1] * intersection_b2[0] +
+                intersection_b2[1] * intersection_b1[0] +
+                intersection_b1[1] * intersection_a1[0];
+
+            REAL step4 = step3 - step2;
+
+            REAL area = step4 / 2;
+            logger.info << "index: " << index << logger.end; 
+            logger.info << "intersection a: < " 
+                        << intersection_a1 << " | "
+                        << intersection_a2 << " >" << logger.end;
+
+            logger.info << "intersection b: < " 
+                        << intersection_b1 << " | "
+                        << intersection_b2 << " >" << logger.end;
+
+            logger.info << "area: " << area << logger.end;
 
             // sum for those between 127 and 136 by multiplying 
             //    with projection data (hole numbers)
-            sum += area * (*sinogram)(projection,index);
+            sum += area * (*sinogram)(projection, index);
 
             // reuse last calculated intersection point
             intersection_a1 = intersection_b1;
             intersection_a2 = intersection_b2;
         }
+        }
 
-        // @todo: add the two corners that does not make 
-        //        a clean cut on the projection plate
+        }        
 
         // @todo: something speciale has to be done for the line
         //        crossing the center of the voxel
     }
+    logger.info << "sum: " << sum << logger.end;
     return sum;
 }
 */
 
-class Runner : public Core::Thread {
-public:
-void Run() {
+void run() {
+    /*
     // load the RGBA gray scale input file
     string filename = "shepp256.png";
     ITexture2DPtr tex =
@@ -267,15 +610,14 @@ void Run() {
     // convert to floating point arrays
     Texture2DPtr(REAL) input = Utils::TexUtils::ToFloatTexture<REAL>(ut_tex);
 
-    REAL maxAngle = PI;
     unsigned int w = input->GetWidth();
     unsigned int h = input->GetHeight();
     logger.info << "input: " << filename << " ("
                 << w << "x" << h << ")" << logger.end;
-    logger.info << "numPixelsOnLine: " << numPixelsOnLine << logger.end;
+    logger.info << "numPixelsPerProjection: " << numPixelsPerProjection << logger.end;
 
     Texture2DPtr(REAL) sinogram( new Texture2D<REAL>(numProjections,
-                                                     numPixelsOnLine, 1));
+                                                     numPixelsPerProjection, 1));
 
     // forward projection
     for (unsigned int projection=0; projection<numProjections; projection++) {
@@ -283,7 +625,7 @@ void Run() {
         REAL angle = maxAngle *(projection/(REAL)numProjections);
         logger.info << "angle: " << angle << logger.end;
 
-        for (unsigned int targetPixel=0; targetPixel<numPixelsOnLine;
+        for (unsigned int targetPixel=0; targetPixel<numPixelsPerProjection;
              targetPixel++) {
             //logger.info << "pixel line: " << pixelOnLine << logger.end;
             (*sinogram)(projection, targetPixel) =
@@ -301,40 +643,67 @@ void Run() {
     Utils::TexUtils::Normalize(sinogram,0,1);
 
     // create a output canvas
-    UCharTexture2DPtr sinogramChar = Utils::TexUtils::ToUCharTexture<REAL>(sinogram);
+    UCharTexture2DPtr sinogramChar = 
+        Utils::TexUtils::ToUCharTexture<REAL>(sinogram);
     TextureTool<unsigned char>
         ::DumpTexture(Utils::TexUtils::ToRGBAfromLuminance(sinogramChar),
                       "sinogram.png");
-    //@todo: dump as EXR
-
     TextureTool<REAL>
         ::DumpTexture(Utils::TexUtils::ToRGBAfromLuminance(sinogram),
                       "sinogram.exr");
+    */
 
-    /*
-REAL output[w][h];
+
+    string filename = "sinogram.png";
+    ITexture2DPtr sinopng =
+        ResourceManager<ITexture2D>::Create(filename);
+    sinopng->Load();
+    // peel out one channel for gray scale from the RGBA texture.
+    EmptyTextureResourcePtr sinoe =
+        EmptyTextureResource::CloneChannel(sinopng,0); //@todo: RGBAToGrayScale()
+    // convert to floating point arrays
+    Texture2DPtr(REAL) sino = Utils::TexUtils::ToFloatTexture<REAL>(sinoe);
+
+    unsigned int ws = 512;
+    unsigned int hs = 512;
+    REAL hws = ws/2.0;
+    REAL hhs = hs/2.0;
+
+    Texture2DPtr(REAL) output( new Texture2D<REAL>(ws, hs, 1));
 
     // backwards projection
-    for (unsigned int x=0; x<w; x++) {
-        for (unsigned int y=0; y<h; y++) {
-            output[x][y] =
-                simpleBackwardsProjection(x, y);
+    for (unsigned int x=0; x<ws; x++) {
+        for (unsigned int y=0; y<hs; y++) {
+            (*output)(x,y) =
+                simpleBackwardsProjection(x-hws, y-hhs, sino);
+
+        mutexPoints.Lock();
+        mutexLines.Lock();
+        points.clear();
+        lines.clear();
+        mutexPoints.Unlock();
+        mutexLines.Unlock();
         }
     }
 
+    Utils::TexUtils::Normalize(output,0,1);
 
-    // run initiali heat equation
-    FloatTexture2DPtr v0 = J(0.24, u0);
-    output = Utils::TexUtils::ToUCharTexture(v0);
-    TextureTool<unsigned char>::DumpTexture(Utils::TexUtils::ToRGBAfromLuminance(output), "v0.png");
-
-    FloatTexture2DPtr result = ROFEquation(0.000001, u0, v0);
-    string outputFile = "output.png";
-    output = Utils::TexUtils::ToUCharTexture(result);
-    TextureTool<unsigned char>::DumpTexture(Utils::TexUtils::ToRGBAfromLuminance(output), outputFile);
-    */
-
+    // create a output canvas
+    UCharTexture2DPtr outputChar = 
+        Utils::TexUtils::ToUCharTexture<REAL>(output);
+    TextureTool<unsigned char>
+        ::DumpTexture(Utils::TexUtils::ToRGBAfromLuminance(outputChar),
+                      "output.png");
+    TextureTool<REAL>
+        ::DumpTexture(Utils::TexUtils::ToRGBAfromLuminance(output),
+                      "output.exr");
 }
+
+class Runner : public Core::Thread {
+public:
+    void Run() {
+        run();
+    }
 };
 
 class Painter
@@ -345,7 +714,7 @@ public:
         Vector<3,float> color(1.0,0.0,0.0);
         Vector<3,float> left(-1.0,0.0,0.0);
         Vector<3,float> right(1.0,0.0,0.0);
-
+        /*
         color = Vector<3,float>(0.0,0.0,0.0);
         left = Vector<3,float>(-1000.0,0.0,0.0);
         right = Vector<3,float>(1000.0,0.0,0.0);
@@ -355,6 +724,7 @@ public:
         left = Vector<3,float>(0.0,-1000.0,0.0);
         right = Vector<3,float>(0.0,1000.0,0.0);
         arg.renderer.DrawLine( Line(left,right), color, 1 );
+        */
         /*
         color = Vector<3,float>(0.0,0.0,1.0);
         left = Vector<3,float>(0.0,0.0,-1000.0);
@@ -402,17 +772,23 @@ int main(int argc, char** argv) {
     ResourceManager<ITextureResource>::AddPlugin(new FreeImagePlugin());
 
     // @todo: set camera position and direction
-    setup->GetCamera()->SetPosition(Vector<3,float>(0.0,0.0,1000.0));
+    setup->GetCamera()->SetPosition(Vector<3,float>(0.0,0.0,500.0));
+    //setup->GetCamera()->SetPosition(Vector<3,float>(0.0,0.0,1000.0));
     setup->GetCamera()->LookAt(Vector<3,float>(0.0));
-
-    Runner* runner = new Runner();
-    runner->Start();
 
     logger.info << "loading time: " << timer.GetElapsedTime() << logger.end;
 
-    // Start the engine.
-    setup->GetEngine().Start();
+    bool useGUI = false;
+    if (useGUI) {
+        Runner* runner = new Runner();
+        runner->Start();
+        // Start the engine.
+        setup->GetEngine().Start();
+        runner->Wait();
+    } else {
+        run();
+    }
 
-    runner->Wait();
+    logger.info << "execution time: " << timer.GetElapsedTime() << logger.end;
     return EXIT_SUCCESS;
 }
