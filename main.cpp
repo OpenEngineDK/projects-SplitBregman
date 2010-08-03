@@ -300,7 +300,7 @@ int main(int argc, char** argv) {
         REAL hw = w / 2.0;
         REAL hh = h / 2.0;
         REAL radius = sqrt(hw*hw+hh*hh);
-        unsigned int numSamplesPerRay = 2 * radius;
+        unsigned int numSamplesPerRay = (unsigned int)(2.0 * radius);
         //unsigned int numSamplesPerRay = 3 * 512;
 
         FP(inputfile, outputname,
